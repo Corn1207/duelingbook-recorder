@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Duelingbook Recorder</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<header>
+  <h1>Duelingbook Recorder</h1>
+  <div class="header-actions">
+    <label class="filter-label">Desde</label>
+    <input type="date" id="filter-from" class="filter-date">
+    <label class="filter-label">Hasta</label>
+    <input type="date" id="filter-to" class="filter-date">
+    <button class="btn btn-primary" id="btn-filter">Filtrar</button>
+    <button class="btn btn-week" id="btn-show-all">Todos</button>
+    <button class="btn btn-success" id="btn-add">+ Agregar Replay</button>
+  </div>
+</header>
+
+<!-- Stats bar -->
+<div class="stats-bar">
+  <span class="stat pending">⏳ Pendiente: <b id="count-pending">0</b></span>
+  <span class="stat recorded">🎬 Grabado: <b id="count-recorded">0</b></span>
+  <span class="stat thumbnail_ready">🖼 Thumbnail: <b id="count-thumbnail">0</b></span>
+  <span class="stat uploaded">✅ Subido: <b id="count-uploaded">0</b></span>
+</div>
+
+<!-- Main table -->
+<div class="table-wrapper">
+  <table id="replays-table">
+    <thead>
+      <tr>
+        <th>Fecha</th>
+        <th>Replay ID</th>
+        <th>Deck 1</th>
+        <th>Deck 2</th>
+        <th>Título</th>
+        <th>Estado</th>
+        <th>YouTube</th>
+        <th>Acciones</th>
+      </tr>
+    </thead>
+    <tbody id="replays-body">
+      <tr><td colspan="8" class="empty">Cargando...</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- Modal -->
+<div id="modal-overlay" class="hidden">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 id="modal-title">Agregar Replay</h2>
+      <button class="btn-close" id="btn-close-modal">✕</button>
+    </div>
+
+    <form id="replay-form">
+      <input type="hidden" id="field-id">
+
+      <div class="form-row">
+        <div class="form-group">
+          <label>Replay ID *</label>
+          <input type="text" id="field-replay-id" placeholder="578530-80432376">
+        </div>
+        <div class="form-group">
+          <label>Fecha planificada</label>
+          <input type="date" id="field-date">
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label>Deck 1</label>
+          <input type="text" id="field-deck1" placeholder="Dracotail">
+        </div>
+        <div class="form-group">
+          <label>Deck 2</label>
+          <input type="text" id="field-deck2" placeholder="Branded">
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>Título YouTube</label>
+        <input type="text" id="field-title" placeholder="Branded Dracotail vs Yummy Miturugui - High Rated Duelingbook">
+      </div>
+
+      <div class="form-group">
+        <label>Descripción</label>
+        <textarea id="field-description" rows="4" placeholder="Descripción del video..."></textarea>
+      </div>
+
+      <div class="form-group">
+        <label>Tags (separados por coma)</label>
+        <input type="text" id="field-tags" placeholder="yugioh, duelingbook, snake-eyes">
+      </div>
+
+      <div class="form-group" id="group-status" style="display:none">
+        <label>Estado</label>
+        <select id="field-status">
+          <option value="pending">⏳ Pendiente</option>
+          <option value="recorded">🎬 Grabado</option>
+          <option value="thumbnail_ready">🖼 Thumbnail listo</option>
+          <option value="uploaded">✅ Subido</option>
+        </select>
+      </div>
+
+      <div class="form-group" id="group-youtube-url" style="display:none">
+        <label>URL YouTube</label>
+        <input type="text" id="field-youtube-url" placeholder="https://youtube.com/watch?v=...">
+      </div>
+
+      <div class="form-group">
+        <label>Notas</label>
+        <textarea id="field-notes" rows="2" placeholder="Notas personales..."></textarea>
+      </div>
+
+      <div class="modal-actions">
+        <button type="button" class="btn btn-danger" id="btn-delete" style="display:none">Eliminar</button>
+        <button type="submit" class="btn btn-success" id="btn-save">Guardar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
