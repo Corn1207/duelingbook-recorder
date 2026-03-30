@@ -25,6 +25,8 @@ def init_db() -> None:
                 replay_id   TEXT NOT NULL UNIQUE,
                 deck1       TEXT,
                 deck2       TEXT,
+                label_left  TEXT DEFAULT 'DUELINGBOOK',
+                label_right TEXT DEFAULT 'HIGH RATED',
                 title       TEXT,
                 description TEXT,
                 tags        TEXT,
@@ -38,4 +40,17 @@ def init_db() -> None:
                 updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
             )
         """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS deck_cards (
+                id        INTEGER PRIMARY KEY AUTOINCREMENT,
+                deck_name TEXT NOT NULL,
+                card_name TEXT NOT NULL
+            )
+        """)
+        # Migrations: add columns that may not exist in older DBs
+        existing = {row[1] for row in conn.execute("PRAGMA table_info(replays)")}
+        if "label_left" not in existing:
+            conn.execute("ALTER TABLE replays ADD COLUMN label_left TEXT DEFAULT 'DUELINGBOOK'")
+        if "label_right" not in existing:
+            conn.execute("ALTER TABLE replays ADD COLUMN label_right TEXT DEFAULT 'HIGH RATED'")
         conn.commit()

@@ -51,6 +51,7 @@ header h1 {
 .btn-success  { background: #22c55e; color: #fff; }
 .btn-danger   { background: #ef4444; color: #fff; }
 .btn-week     { background: #2a2d3a; color: #ccc; padding: 7px 11px; }
+.btn-decks    { background: #7c3aed; color: #fff; }
 
 .filter-label {
   font-size: 0.8rem;
@@ -161,9 +162,31 @@ tbody td {
 .btn-edit:hover { background: #3b82f6; color: #fff; }
 .btn-record { background: #ef4444; color: #fff; }
 .btn-record:hover { background: #dc2626; }
+.btn-thumb  { background: #7c3aed; color: #fff; }
+.btn-thumb:hover { background: #6d28d9; }
 
 /* Modal */
 .hidden { display: none !important; }
+.modal-wide { width: 760px; }
+
+#thumb-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+}
+
+.thumb-modal {
+  background: #1a1d27;
+  border: 1px solid #2a2d3a;
+  border-radius: 12px;
+  width: 900px;
+  max-width: 95vw;
+  padding: 24px;
+}
 
 #modal-overlay {
   position: fixed;
@@ -242,6 +265,29 @@ tbody td {
   outline: none;
   border-color: #3b82f6;
 }
+
+.autocomplete-list {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: #1a1d27;
+  border: 1px solid #3b82f6;
+  border-radius: 0 0 6px 6px;
+  max-height: 200px;
+  overflow-y: auto;
+  z-index: 300;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.autocomplete-list li {
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: #e0e0e0;
+}
+.autocomplete-list li:hover { background: #2a2d3a; }
 
 .modal-actions {
   display: flex;

@@ -93,12 +93,14 @@ def create_replay():
         try:
             conn.execute("""
                 INSERT INTO replays
-                    (replay_id, deck1, deck2, title, description, tags, notes, scheduled_date)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    (replay_id, deck1, deck2, label_left, label_right, title, description, tags, notes, scheduled_date)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 replay_id,
                 data.get("deck1", ""),
                 data.get("deck2", ""),
+                data.get("label_left", "DUELINGBOOK"),
+                data.get("label_right", "HIGH RATED"),
                 data.get("title", ""),
                 data.get("description", ""),
                 data.get("tags", ""),
@@ -116,8 +118,8 @@ def create_replay():
 @bp.route("/api/replays/<int:row_id>", methods=["PUT"])
 def update_replay(row_id: int):
     data = request.json or {}
-    fields = ["deck1", "deck2", "title", "description", "tags", "notes",
-              "scheduled_date", "status", "video_path", "thumbnail_path", "youtube_url"]
+    fields = ["deck1", "deck2", "label_left", "label_right", "title", "description",
+              "tags", "notes", "scheduled_date", "status", "video_path", "thumbnail_path", "youtube_url"]
     updates = {k: data[k] for k in fields if k in data}
     if not updates:
         return jsonify({"error": "nothing to update"}), 400
@@ -166,5 +168,144 @@ def record_replay(row_id: int):
 def delete_replay(row_id: int):
     with get_connection() as conn:
         conn.execute("DELETE FROM replays WHERE id = ?", (row_id,))
+        conn.commit()
+    return jsonify({"ok": True})
+
+
+# ------------------------------------------------------------------
+# Deck cards
+# ------------------------------------------------------------------
+
+@bp.route("/api/replays/<int:row_id>/thumbnail", methods=["POST"])
+def generate_thumbnail(row_id: int):
+    import random
+    from postprocess.thumbnail import ThumbnailGenerator
+
+    with get_connection() as conn:
+        row = conn.execute("SELECT * FROM replays WHERE id = ?", (row_id,)).fetchone()
+    if not row:
+        return jsonify({"error": "not found"}), 404
+    if row["status"] not in ("recorded", "thumbnail_ready"):
+        return jsonify({"error": "replay must be recorded first"}), 400
+
+    def pick_card(deck_name: str) -> str:
+        with get_connection() as conn:
+            cards = conn.execute(
+                "SELECT card_name FROM deck_cards WHERE deck_name = ?", (deck_name,)
+            ).fetchall()
+        if not cards:
+            return deck_name  # fallback: use deck name as card name
+        return random.choice(cards)["card_name"]
+
+    card1 = pick_card(row["deck1"] or "")
+    card2 = pick_card(row["deck2"] or "")
+
+    output_path = f"output/thumbnails/{row_id}_{row['replay_id']}.jpg"
+
+    try:
+        gen = ThumbnailGenerator()
+        thumb_path = gen.generate(
+            deck1=row["deck1"] or "",
+            card1=card1,
+            deck2=row["deck2"] or "",
+            card2=card2,
+            label_left=row["label_left"] or "DUELINGBOOK",
+            label_right=row["label_right"] or "HIGH RATED",
+            output_path=output_path,
+        )
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+    with get_connection() as conn:
+        conn.execute(
+            "UPDATE replays SET status='thumbnail_ready', thumbnail_path=?, updated_at=datetime('now') WHERE id=?",
+            (thumb_path, row_id),
+        )
+        conn.commit()
+
+    return jsonify({"ok": True, "thumbnail_path": thumb_path})
+
+
+@bp.route("/api/replays/<int:row_id>/thumbnail", methods=["GET"])
+def serve_thumbnail(row_id: int):
+    from flask import send_file
+    BASE = Path(__file__).parent.parent
+    with get_connection() as conn:
+        row = conn.execute("SELECT thumbnail_path FROM replays WHERE id = ?", (row_id,)).fetchone()
+    if not row or not row["thumbnail_path"]:
+        return jsonify({"error": "no thumbnail"}), 404
+    path = Path(row["thumbnail_path"])
+    if not path.is_absolute():
+        path = BASE / path
+    if not path.exists():
+        return jsonify({"error": "file not found"}), 404
+    return send_file(str(path), mimetype="image/jpeg")
+
+
+@bp.route("/api/cards/search", methods=["GET"])
+def search_cards():
+    import requests as req
+    query = request.args.get("q", "").strip()
+    if len(query) < 2:
+        return jsonify([])
+    try:
+        r = req.get(
+            "https://db.ygoprodeck.com/api/v7/cardinfo.php",
+            params={"fname": query, "num": 15, "offset": 0},
+            timeout=5,
+        )
+        if r.status_code == 404:
+            return jsonify([])
+        names = [c["name"] for c in r.json().get("data", [])]
+        return jsonify(names)
+    except Exception:
+        return jsonify([])
+
+
+@bp.route("/api/decks", methods=["GET"])
+def list_decks():
+    with get_connection() as conn:
+        rows = conn.execute(
+            "SELECT * FROM deck_cards ORDER BY deck_name ASC, id ASC"
+        ).fetchall()
+    return jsonify([dict(r) for r in rows])
+
+
+@bp.route("/api/decks", methods=["POST"])
+def create_deck_card():
+    data = request.json or {}
+    deck_name = (data.get("deck_name") or "").strip()
+    card_name = (data.get("card_name") or "").strip()
+    if not deck_name or not card_name:
+        return jsonify({"error": "deck_name and card_name are required"}), 400
+    with get_connection() as conn:
+        conn.execute(
+            "INSERT INTO deck_cards (deck_name, card_name) VALUES (?, ?)",
+            (deck_name, card_name),
+        )
+        conn.commit()
+    return jsonify({"ok": True}), 201
+
+
+@bp.route("/api/decks/<int:row_id>", methods=["PUT"])
+def update_deck_card(row_id: int):
+    data = request.json or {}
+    deck_name = (data.get("deck_name") or "").strip()
+    card_name = (data.get("card_name") or "").strip()
+    if not deck_name or not card_name:
+        return jsonify({"error": "deck_name and card_name are required"}), 400
+    with get_connection() as conn:
+        conn.execute(
+            "UPDATE deck_cards SET deck_name=?, card_name=? WHERE id=?",
+            (deck_name, card_name, row_id),
+        )
+        conn.commit()
+    return jsonify({"ok": True})
+
+
+@bp.route("/api/decks/<int:row_id>", methods=["DELETE"])
+def delete_deck_card(row_id: int):
+    with get_connection() as conn:
+        conn.execute("DELETE FROM deck_cards WHERE id = ?", (row_id,))
         conn.commit()
     return jsonify({"ok": True})

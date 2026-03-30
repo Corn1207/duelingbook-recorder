@@ -7,6 +7,7 @@ let editingId = null;
 // ------------------------------------------------------------------
 document.addEventListener("DOMContentLoaded", () => {
   loadReplays();
+  loadDeckOptions();
 
   document.getElementById("btn-add").addEventListener("click", openAddModal);
   document.getElementById("btn-save").addEventListener("click", saveReplay);
@@ -19,6 +20,15 @@ document.addEventListener("DOMContentLoaded", () => {
   });
   document.getElementById("btn-close-modal").addEventListener("click", closeModal);
   document.getElementById("field-replay-id").addEventListener("paste", extractIdFromUrl);
+
+  // Decks modal
+  document.getElementById("btn-open-decks").addEventListener("click", openDecksModal);
+  document.getElementById("btn-close-decks").addEventListener("click", closeDecksModal);
+  document.getElementById("btn-add-deck-card").addEventListener("click", addDeckCard);
+  document.getElementById("new-card-name").addEventListener("input", onCardInput);
+  document.getElementById("new-card-name").addEventListener("blur", () => {
+    setTimeout(() => document.getElementById("card-autocomplete").classList.add("hidden"), 200);
+  });
 });
 
 // ------------------------------------------------------------------
@@ -34,7 +44,7 @@ function extractIdFromUrl(e) {
 }
 
 // ------------------------------------------------------------------
-// Load & render
+// Load & render replays
 // ------------------------------------------------------------------
 async function loadReplays(from = null, to = null) {
   const params = new URLSearchParams();
@@ -70,6 +80,8 @@ function renderTable(rows) {
       <td>${r.youtube_url ? `<a class="yt-link" href="${r.youtube_url}" target="_blank">▶ Ver</a>` : "—"}</td>
       <td class="actions-cell">
         ${r.status === "pending" ? `<button class="btn-record" onclick="startRecording(${r.id})">⏺ Grabar</button>` : ""}
+        ${r.status === "recorded" ? `<button class="btn-thumb" onclick="generateThumbnail(${r.id})">🖼 Thumbnail</button>` : ""}
+        ${r.status === "thumbnail_ready" ? `<button class="btn-thumb" onclick="showThumbnail(${r.id}, '${r.replay_id}')">🖼 Ver</button><button class="btn-record" onclick="regenerateThumbnail(${r.id})">↺ Regenerar</button>` : ""}
         <button class="btn-edit" onclick="openEditModal(${r.id})">Editar</button>
       </td>
     </tr>
@@ -90,13 +102,15 @@ function statusLabel(s) {
 }
 
 // ------------------------------------------------------------------
-// Modal
+// Replay Modal
 // ------------------------------------------------------------------
 function openAddModal() {
   editingId = null;
   document.getElementById("modal-title").textContent = "Agregar Replay";
   document.getElementById("replay-form").reset();
   document.getElementById("field-id").value = "";
+  document.getElementById("field-label-left").value = "DUELINGBOOK";
+  document.getElementById("field-label-right").value = "HIGH RATED";
   document.getElementById("btn-delete").style.display = "none";
   document.getElementById("field-replay-id").disabled = false;
   document.getElementById("group-status").style.display = "none";
@@ -116,6 +130,8 @@ async function openEditModal(id) {
   document.getElementById("field-replay-id").disabled = true;
   document.getElementById("field-deck1").value = row.deck1 || "";
   document.getElementById("field-deck2").value = row.deck2 || "";
+  document.getElementById("field-label-left").value = row.label_left || "DUELINGBOOK";
+  document.getElementById("field-label-right").value = row.label_right || "HIGH RATED";
   document.getElementById("field-title").value = row.title || "";
   document.getElementById("field-description").value = row.description || "";
   document.getElementById("field-tags").value = row.tags || "";
@@ -140,6 +156,8 @@ async function saveReplay(e) {
     replay_id:      document.getElementById("field-replay-id").value.trim(),
     deck1:          document.getElementById("field-deck1").value.trim(),
     deck2:          document.getElementById("field-deck2").value.trim(),
+    label_left:     document.getElementById("field-label-left").value.trim(),
+    label_right:    document.getElementById("field-label-right").value.trim(),
     title:          document.getElementById("field-title").value.trim(),
     description:    document.getElementById("field-description").value.trim(),
     tags:           document.getElementById("field-tags").value.trim(),
@@ -168,6 +186,17 @@ async function saveReplay(e) {
   loadReplays();
 }
 
+async function deleteReplay() {
+  if (!editingId) return;
+  if (!confirm("¿Eliminar este replay?")) return;
+  await fetch(`/api/replays/${editingId}`, { method: "DELETE" });
+  closeModal();
+  loadReplays();
+}
+
+// ------------------------------------------------------------------
+// Recording
+// ------------------------------------------------------------------
 async function startRecording(id) {
   if (!confirm("¿Iniciar grabación? La pantalla será capturada por OBS.")) return;
   const res = await fetch(`/api/replays/${id}/record`, { method: "POST" });
@@ -191,10 +220,144 @@ function pollWhileRecording() {
   }, 5000);
 }
 
-async function deleteReplay() {
-  if (!editingId) return;
-  if (!confirm("¿Eliminar este replay?")) return;
-  await fetch(`/api/replays/${editingId}`, { method: "DELETE" });
-  closeModal();
+// ------------------------------------------------------------------
+// Thumbnail
+// ------------------------------------------------------------------
+async function generateThumbnail(id) {
+  const res = await fetch(`/api/replays/${id}/thumbnail`, { method: "POST" });
+  const data = await res.json();
+  if (!res.ok) { alert(data.error || "Error al generar thumbnail"); return; }
+  const rows = await fetch("/api/replays").then(r => r.json());
+  const row = rows.find(r => r.id === id);
   loadReplays();
+  if (row) showThumbnail(id, row.replay_id);
+}
+
+async function regenerateThumbnail(id) {
+  // Revert to recorded so endpoint accepts it
+  await fetch(`/api/replays/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ status: "recorded" }),
+  });
+  await generateThumbnail(id);
+}
+
+function showThumbnail(id, replayId) {
+  const overlay = document.getElementById("thumb-overlay");
+  const img = document.getElementById("thumb-preview");
+  img.src = `/thumbnails/${id}_${replayId}.jpg?t=${Date.now()}`;
+  overlay.classList.remove("hidden");
+}
+
+// ------------------------------------------------------------------
+// Decks Modal
+// ------------------------------------------------------------------
+// ------------------------------------------------------------------
+// Card autocomplete
+// ------------------------------------------------------------------
+let _cardSearchTimer = null;
+
+function onCardInput(e) {
+  const q = e.target.value.trim();
+  const list = document.getElementById("card-autocomplete");
+  clearTimeout(_cardSearchTimer);
+  if (q.length < 2) { list.classList.add("hidden"); return; }
+  _cardSearchTimer = setTimeout(() => fetchCardSuggestions(q), 300);
+}
+
+async function fetchCardSuggestions(q) {
+  const list = document.getElementById("card-autocomplete");
+  const names = await fetch(`/api/cards/search?q=${encodeURIComponent(q)}`).then(r => r.json());
+  if (!names.length) { list.classList.add("hidden"); return; }
+  list.innerHTML = names.map(n => `<li onclick="selectCard('${n.replace(/'/g, "\\'")}')">${n}</li>`).join("");
+  list.classList.remove("hidden");
+}
+
+function selectCard(name) {
+  document.getElementById("new-card-name").value = name;
+  document.getElementById("card-autocomplete").classList.add("hidden");
+}
+
+async function loadDeckOptions() {
+  const rows = await fetch("/api/decks").then(r => r.json());
+  const names = [...new Set(rows.map(r => r.deck_name))];
+  const datalist = document.getElementById("deck-options");
+  datalist.innerHTML = names.map(n => `<option value="${n}">`).join("");
+}
+
+async function openDecksModal() {
+  await loadDecksTable();
+  document.getElementById("decks-overlay").classList.remove("hidden");
+}
+
+function closeDecksModal() {
+  document.getElementById("decks-overlay").classList.add("hidden");
+  loadDeckOptions(); // refresh autocomplete
+}
+
+async function loadDecksTable() {
+  const rows = await fetch("/api/decks").then(r => r.json());
+  const tbody = document.getElementById("decks-body");
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="3" class="empty">No hay decks. Agrega uno arriba.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = rows.map(r => `
+    <tr id="deck-row-${r.id}">
+      <td><span id="deck-name-${r.id}">${r.deck_name}</span></td>
+      <td><span id="card-name-${r.id}">${r.card_name}</span></td>
+      <td class="actions-cell">
+        <button class="btn-edit" onclick="editDeckCard(${r.id}, '${r.deck_name.replace(/'/g,"\\'")}', '${r.card_name.replace(/'/g,"\\'")}')">Editar</button>
+        <button class="btn-edit" onclick="deleteDeckCard(${r.id})">Eliminar</button>
+      </td>
+    </tr>
+  `).join("");
+}
+
+async function addDeckCard() {
+  const deck_name = document.getElementById("new-deck-name").value.trim();
+  const card_name = document.getElementById("new-card-name").value.trim();
+  if (!deck_name || !card_name) { alert("Completa ambos campos"); return; }
+
+  const res = await fetch("/api/decks", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ deck_name, card_name }),
+  });
+  if (!res.ok) { alert("Error al agregar"); return; }
+  document.getElementById("new-deck-name").value = "";
+  document.getElementById("new-card-name").value = "";
+  loadDecksTable();
+}
+
+function editDeckCard(id, deckName, cardName) {
+  const row = document.getElementById(`deck-row-${id}`);
+  row.innerHTML = `
+    <td><input type="text" id="edit-deck-${id}" value="${deckName}" style="width:100%"></td>
+    <td><input type="text" id="edit-card-${id}" value="${cardName}" style="width:100%"></td>
+    <td class="actions-cell">
+      <button class="btn-success btn" onclick="saveDeckCard(${id})">Guardar</button>
+      <button class="btn-edit" onclick="loadDecksTable()">Cancelar</button>
+    </td>
+  `;
+}
+
+async function saveDeckCard(id) {
+  const deck_name = document.getElementById(`edit-deck-${id}`).value.trim();
+  const card_name = document.getElementById(`edit-card-${id}`).value.trim();
+  if (!deck_name || !card_name) { alert("Completa ambos campos"); return; }
+  await fetch(`/api/decks/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ deck_name, card_name }),
+  });
+  loadDecksTable();
+  loadDeckOptions();
+}
+
+async function deleteDeckCard(id) {
+  if (!confirm("¿Eliminar esta carta?")) return;
+  await fetch(`/api/decks/${id}`, { method: "DELETE" });
+  loadDecksTable();
 }
