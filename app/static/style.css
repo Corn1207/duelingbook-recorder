@@ -166,6 +166,8 @@ tbody td {
 .btn-thumb:hover { background: #6d28d9; }
 .btn-ai     { background: #0ea5e9; color: #fff; }
 .btn-ai:hover { background: #0284c7; }
+.btn-upload { background: #ff0000; color: #fff; border: none; padding: 5px 10px; border-radius: 5px; cursor: pointer; font-size: 0.8rem; font-weight: 600; }
+.btn-upload:hover { background: #cc0000; }
 
 /* Modal */
 .hidden { display: none !important; }

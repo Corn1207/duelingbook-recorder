@@ -83,6 +83,7 @@ function renderTable(rows) {
         ${r.status === "recorded" ? `<button class="btn-thumb" onclick="generateThumbnail(${r.id})">🖼 Thumbnail</button>` : ""}
         ${["recorded","thumbnail_ready"].includes(r.status) ? `<button class="btn-ai" onclick="generateMetadata(${r.id})">🤖 IA</button>` : ""}
         ${r.status === "thumbnail_ready" ? `<button class="btn-thumb" onclick="showThumbnail(${r.id}, '${r.replay_id}')">🖼 Ver</button><button class="btn-record" onclick="regenerateThumbnail(${r.id})">↺ Regenerar</button>` : ""}
+        ${r.status === "thumbnail_ready" ? `<button class="btn-upload" onclick="uploadToYouTube(${r.id})">▶ YouTube</button>` : ""}
         <button class="btn-edit" onclick="openEditModal(${r.id})">Editar</button>
       </td>
     </tr>
@@ -240,6 +241,39 @@ async function generateMetadata(id) {
   if (!res.ok) { alert(data.error || "Error al generar metadata"); return; }
 
   alert(`✅ Metadata generada:\n\nTÍTULO:\n${data.title}\n\nTAGS:\n${data.tags}`);
+  loadReplays();
+}
+
+// ------------------------------------------------------------------
+// YouTube Upload
+// ------------------------------------------------------------------
+async function uploadToYouTube(id) {
+  const privacy = prompt("Privacidad del video:\n  private — solo tú\n  unlisted — con link\n  public — público\n\nEscribe una opción:", "private");
+  if (!privacy) return;
+  if (!["private", "unlisted", "public"].includes(privacy)) {
+    alert("Opción inválida. Usa: private, unlisted o public");
+    return;
+  }
+
+  if (!confirm(`¿Subir a YouTube como "${privacy}"? Esto abrirá el navegador para autorizar si es la primera vez.`)) return;
+
+  const btn = event.target;
+  btn.textContent = "⏳ Subiendo...";
+  btn.disabled = true;
+
+  const res = await fetch(`/api/replays/${id}/upload`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ privacy }),
+  });
+  const data = await res.json();
+
+  btn.textContent = "▶ YouTube";
+  btn.disabled = false;
+
+  if (!res.ok) { alert(data.error || "Error al subir"); return; }
+
+  alert(`✅ Video subido!\n\n${data.youtube_url}`);
   loadReplays();
 }
 

@@ -8,3 +8,6 @@ data/
 assets/logo.jpeg
 .env
 .claude/
+credentials/
+youtube_client_secret*.json
+client_secret_*.json

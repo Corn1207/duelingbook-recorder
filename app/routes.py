@@ -202,6 +202,47 @@ def delete_replay(row_id: int):
     return jsonify({"ok": True})
 
 
+@bp.route("/api/replays/<int:row_id>/upload", methods=["POST"])
+def upload_to_youtube(row_id: int):
+    import traceback
+
+    try:
+        from postprocess.youtube_uploader import upload_video
+
+        with get_connection() as conn:
+            row = conn.execute("SELECT * FROM replays WHERE id = ?", (row_id,)).fetchone()
+        if not row:
+            return jsonify({"error": "not found"}), 404
+        if row["status"] not in ("thumbnail_ready", "recorded"):
+            return jsonify({"error": "replay must be recorded or have a thumbnail first"}), 400
+        if not row["video_path"]:
+            return jsonify({"error": "no video file found"}), 400
+
+        data = request.json or {}
+        privacy = data.get("privacy", "private")
+
+        yt_url = upload_video(
+            video_path=row["video_path"],
+            title=row["title"] or "",
+            description=row["description"] or "",
+            tags=row["tags"] or "",
+            thumbnail_path=row["thumbnail_path"] or None,
+            privacy=privacy,
+        )
+    except Exception as e:
+        print(traceback.format_exc())
+        return jsonify({"error": str(e)}), 500
+
+    with get_connection() as conn:
+        conn.execute(
+            "UPDATE replays SET status='uploaded', youtube_url=?, updated_at=datetime('now') WHERE id=?",
+            (yt_url, row_id),
+        )
+        conn.commit()
+
+    return jsonify({"ok": True, "youtube_url": yt_url})
+
+
 # ------------------------------------------------------------------
 # Deck cards
 # ------------------------------------------------------------------
