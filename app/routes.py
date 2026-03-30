@@ -58,6 +58,29 @@ def index():
     return render_template("index.html")
 
 
+@bp.route("/api/capture-replay", methods=["POST"])
+def capture_replay():
+    """Receives replay data from the Tampermonkey userscript."""
+    data = request.json or {}
+    replay_id = (data.get("replay_id") or "").strip()
+    if not replay_id:
+        return jsonify({"error": "replay_id is required"}), 400
+
+    with get_connection() as conn:
+        try:
+            conn.execute("""
+                INSERT INTO replays (replay_id, scheduled_date)
+                VALUES (?, date('now'))
+            """, (replay_id,))
+            conn.commit()
+            logger.info(f"Replay captured from browser: {replay_id}")
+        except Exception as e:
+            if "UNIQUE" in str(e):
+                return jsonify({"error": "replay already exists"}), 409
+            raise
+    return jsonify({"ok": True}), 201
+
+
 @bp.route("/api/logs", methods=["GET"])
 def get_logs():
     lines = int(request.args.get("lines", 100))
