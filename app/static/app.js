@@ -8,6 +8,8 @@ let editingId = null;
 document.addEventListener("DOMContentLoaded", () => {
   loadReplays();
   loadDeckOptions();
+  loadLogs();
+  setInterval(loadLogs, 5000);
 
   document.getElementById("btn-add").addEventListener("click", openAddModal);
   document.getElementById("btn-save").addEventListener("click", saveReplay);
@@ -254,27 +256,62 @@ async function uploadToYouTube(id) {
     alert("Opción inválida. Usa: private, unlisted o public");
     return;
   }
-
   if (!confirm(`¿Subir a YouTube como "${privacy}"? Esto abrirá el navegador para autorizar si es la primera vez.`)) return;
 
   const btn = event.target;
-  btn.textContent = "⏳ Subiendo...";
   btn.disabled = true;
 
+  // Start upload
   const res = await fetch(`/api/replays/${id}/upload`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ privacy }),
   });
   const data = await res.json();
+  if (!res.ok) {
+    btn.disabled = false;
+    alert(data.error || "Error al subir");
+    return;
+  }
 
-  btn.textContent = "▶ YouTube";
-  btn.disabled = false;
+  // Show progress bar in the button cell
+  const cell = btn.closest("td");
+  const barId = `upload-bar-${id}`;
+  cell.insertAdjacentHTML("beforeend", `
+    <div id="${barId}" style="margin-top:6px;width:120px">
+      <div style="background:#2a2d3a;border-radius:4px;height:6px;overflow:hidden">
+        <div id="${barId}-fill" style="height:6px;background:#ef4444;width:0%;transition:width 0.4s"></div>
+      </div>
+      <div id="${barId}-label" style="font-size:0.7rem;color:#aaa;text-align:center;margin-top:2px">0%</div>
+    </div>
+  `);
 
-  if (!res.ok) { alert(data.error || "Error al subir"); return; }
+  // Listen SSE progress
+  const evtSource = new EventSource(`/api/replays/${id}/upload/progress`);
+  evtSource.onmessage = (e) => {
+    const state = JSON.parse(e.data);
+    const fill  = document.getElementById(`${barId}-fill`);
+    const label = document.getElementById(`${barId}-label`);
+    if (fill)  fill.style.width  = state.pct + "%";
+    if (label) label.textContent = state.pct + "%";
 
-  alert(`✅ Video subido!\n\n${data.youtube_url}`);
-  loadReplays();
+    if (state.done) {
+      evtSource.close();
+      document.getElementById(barId)?.remove();
+      btn.disabled = false;
+      if (state.error) {
+        alert("Error al subir: " + state.error);
+      } else {
+        alert(`✅ Video subido!\n\n${state.url}`);
+        loadReplays();
+      }
+    }
+  };
+  evtSource.onerror = () => {
+    evtSource.close();
+    document.getElementById(barId)?.remove();
+    btn.disabled = false;
+  };
 }
 
 // ------------------------------------------------------------------
@@ -305,6 +342,47 @@ function showThumbnail(id, replayId) {
   const img = document.getElementById("thumb-preview");
   img.src = `/thumbnails/${id}_${replayId}.jpg?t=${Date.now()}`;
   overlay.classList.remove("hidden");
+}
+
+// ------------------------------------------------------------------
+// Log Panel
+// ------------------------------------------------------------------
+let _logCollapsed = false;
+
+async function loadLogs() {
+  const lines = await fetch("/api/logs?lines=200").then(r => r.json());
+  const pre = document.getElementById("log-content");
+  const body = document.getElementById("log-body");
+  const status = document.getElementById("log-status");
+
+  const html = lines.map(line => {
+    if (line.includes("[ERROR]"))   return `<span class="log-error">${escHtml(line)}</span>`;
+    if (line.includes("[WARNING]")) return `<span class="log-warning">${escHtml(line)}</span>`;
+    return `<span class="log-info">${escHtml(line)}</span>`;
+  }).join("\n");
+
+  pre.innerHTML = html || "Sin logs aún.";
+  status.textContent = `${lines.length} líneas`;
+
+  // Auto-scroll al fondo solo si ya estaba al fondo
+  const atBottom = body.scrollHeight - body.scrollTop <= body.clientHeight + 40;
+  if (atBottom) body.scrollTop = body.scrollHeight;
+}
+
+function toggleLogs() {
+  _logCollapsed = !_logCollapsed;
+  document.getElementById("log-body").classList.toggle("collapsed", _logCollapsed);
+  document.getElementById("log-chevron").textContent = _logCollapsed ? "▼" : "▲";
+}
+
+async function clearLogs() {
+  if (!confirm("¿Limpiar el archivo de logs?")) return;
+  await fetch("/api/logs", { method: "DELETE" });
+  loadLogs();
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
 }
 
 // ------------------------------------------------------------------

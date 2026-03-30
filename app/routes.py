@@ -10,9 +10,18 @@ from flask import Blueprint, jsonify, render_template, request
 
 from app.database import get_connection
 
+import logging
+import time
+from pathlib import Path
+
 bp = Blueprint("main", __name__)
+logger = logging.getLogger(__name__)
 
 VALID_STATUSES = ["pending", "recorded", "thumbnail_ready", "uploaded"]
+LOG_FILE = Path(__file__).parent.parent / "output" / "app.log"
+
+# upload progress store: {row_id: {"pct": int, "done": bool, "error": str|None, "url": str|None}}
+_upload_progress: dict = {}
 
 # Tracks which replay IDs are currently being recorded
 _recording_in_progress: set[str] = set()
@@ -36,9 +45,10 @@ def _run_pipeline(row_id: int, replay_id: str) -> None:
         pipeline = RecordingPipeline(obs_password="123456")
         final_path = pipeline.run(replay_id=replay_id)
         update("recorded", video_path=final_path)
+        logging.getLogger(__name__).info(f"Recording finished: {final_path}")
     except Exception as e:
         update("pending")  # revert so user can retry
-        print(f"[pipeline error] {e}")
+        logging.getLogger(__name__).error(f"Pipeline error for replay {replay_id}: {e}", exc_info=True)
     finally:
         _recording_in_progress.discard(replay_id)
 
@@ -46,6 +56,23 @@ def _run_pipeline(row_id: int, replay_id: str) -> None:
 @bp.route("/")
 def index():
     return render_template("index.html")
+
+
+@bp.route("/api/logs", methods=["GET"])
+def get_logs():
+    lines = int(request.args.get("lines", 100))
+    if not LOG_FILE.exists():
+        return jsonify([])
+    with open(LOG_FILE, encoding="utf-8") as f:
+        all_lines = f.readlines()
+    return jsonify([l.rstrip() for l in all_lines[-lines:]])
+
+
+@bp.route("/api/logs", methods=["DELETE"])
+def clear_logs():
+    if LOG_FILE.exists():
+        LOG_FILE.write_text("")
+    return jsonify({"ok": True})
 
 
 # ------------------------------------------------------------------
@@ -178,6 +205,7 @@ def record_replay(row_id: int):
         return jsonify({"error": "another recording is already in progress"}), 409
 
     replay_id = row["replay_id"]
+    logger.info(f"Starting recording for replay {replay_id} (id={row_id})")
     _recording_in_progress.add(replay_id)
 
     # Mark as recording in the DB immediately
@@ -202,25 +230,15 @@ def delete_replay(row_id: int):
     return jsonify({"ok": True})
 
 
-@bp.route("/api/replays/<int:row_id>/upload", methods=["POST"])
-def upload_to_youtube(row_id: int):
-    import traceback
+def _run_upload(row_id: int, row, privacy: str) -> None:
+    from postprocess.youtube_uploader import upload_video
+
+    _upload_progress[row_id] = {"pct": 0, "done": False, "error": None, "url": None}
+
+    def on_progress(pct):
+        _upload_progress[row_id]["pct"] = pct
 
     try:
-        from postprocess.youtube_uploader import upload_video
-
-        with get_connection() as conn:
-            row = conn.execute("SELECT * FROM replays WHERE id = ?", (row_id,)).fetchone()
-        if not row:
-            return jsonify({"error": "not found"}), 404
-        if row["status"] not in ("thumbnail_ready", "recorded"):
-            return jsonify({"error": "replay must be recorded or have a thumbnail first"}), 400
-        if not row["video_path"]:
-            return jsonify({"error": "no video file found"}), 400
-
-        data = request.json or {}
-        privacy = data.get("privacy", "private")
-
         yt_url = upload_video(
             video_path=row["video_path"],
             title=row["title"] or "",
@@ -228,19 +246,59 @@ def upload_to_youtube(row_id: int):
             tags=row["tags"] or "",
             thumbnail_path=row["thumbnail_path"] or None,
             privacy=privacy,
+            progress_callback=on_progress,
         )
+        _upload_progress[row_id].update({"pct": 100, "done": True, "url": yt_url})
+        with get_connection() as conn:
+            conn.execute(
+                "UPDATE replays SET status='uploaded', youtube_url=?, updated_at=datetime('now') WHERE id=?",
+                (yt_url, row_id),
+            )
+            conn.commit()
+        logger.info(f"Upload complete for replay id={row_id}: {yt_url}")
     except Exception as e:
-        print(traceback.format_exc())
-        return jsonify({"error": str(e)}), 500
+        import traceback
+        logger.error(f"Upload failed for replay id={row_id}: {e}", exc_info=True)
+        _upload_progress[row_id].update({"done": True, "error": str(e)})
 
+
+@bp.route("/api/replays/<int:row_id>/upload", methods=["POST"])
+def upload_to_youtube(row_id: int):
     with get_connection() as conn:
-        conn.execute(
-            "UPDATE replays SET status='uploaded', youtube_url=?, updated_at=datetime('now') WHERE id=?",
-            (yt_url, row_id),
-        )
-        conn.commit()
+        row = conn.execute("SELECT * FROM replays WHERE id = ?", (row_id,)).fetchone()
+    if not row:
+        return jsonify({"error": "not found"}), 404
+    if row["status"] not in ("thumbnail_ready", "recorded"):
+        return jsonify({"error": "replay must be recorded or have a thumbnail first"}), 400
+    if not row["video_path"]:
+        return jsonify({"error": "no video file found"}), 400
+    if row_id in _upload_progress and not _upload_progress[row_id]["done"]:
+        return jsonify({"error": "upload already in progress"}), 409
 
-    return jsonify({"ok": True, "youtube_url": yt_url})
+    data = request.json or {}
+    privacy = data.get("privacy", "private")
+
+    t = threading.Thread(target=_run_upload, args=(row_id, dict(row), privacy), daemon=True)
+    t.start()
+
+    return jsonify({"ok": True})
+
+
+@bp.route("/api/replays/<int:row_id>/upload/progress")
+def upload_progress_sse(row_id: int):
+    from flask import Response
+
+    def stream():
+        while True:
+            state = _upload_progress.get(row_id, {"pct": 0, "done": False, "error": None, "url": None})
+            import json
+            yield f"data: {json.dumps(state)}\n\n"
+            if state["done"]:
+                break
+            time.sleep(1)
+
+    return Response(stream(), mimetype="text/event-stream",
+                    headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
 # ------------------------------------------------------------------

@@ -55,6 +55,7 @@ def upload_video(
     tags: str,
     thumbnail_path: str = None,
     privacy: str = "private",
+    progress_callback=None,
 ) -> str:
     """
     Uploads a video to YouTube.
@@ -103,7 +104,10 @@ def upload_video(
     while response is None:
         status, response = request.next_chunk()
         if status:
-            logger.info(f"Upload progress: {int(status.progress() * 100)}%")
+            pct = int(status.progress() * 100)
+            logger.info(f"Upload progress: {pct}%")
+            if progress_callback:
+                progress_callback(pct)
 
     video_id = response["id"]
     logger.info(f"Upload complete: {video_id}")

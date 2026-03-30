@@ -186,6 +186,21 @@
   </div>
 </div>
 
+<!-- Log Panel -->
+<div id="log-panel">
+  <div id="log-header" onclick="toggleLogs()">
+    <span>📋 Logs</span>
+    <div style="display:flex;gap:10px;align-items:center">
+      <span id="log-status" style="font-size:0.75rem;color:#666"></span>
+      <button class="btn btn-week" style="padding:3px 10px;font-size:0.75rem" onclick="event.stopPropagation();clearLogs()">Limpiar</button>
+      <span id="log-chevron">▲</span>
+    </div>
+  </div>
+  <div id="log-body">
+    <pre id="log-content">Cargando logs...</pre>
+  </div>
+</div>
+
 <script src="/static/app.js"></script>
 </body>
 </html>

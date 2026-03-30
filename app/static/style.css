@@ -169,6 +169,55 @@ tbody td {
 .btn-upload { background: #ff0000; color: #fff; border: none; padding: 5px 10px; border-radius: 5px; cursor: pointer; font-size: 0.8rem; font-weight: 600; }
 .btn-upload:hover { background: #cc0000; }
 
+/* Log Panel */
+#log-panel {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: #0d0f17;
+  border-top: 1px solid #2a2d3a;
+  z-index: 50;
+  font-family: "SF Mono", "Fira Code", monospace;
+}
+
+#log-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 16px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #aaa;
+  user-select: none;
+}
+#log-header:hover { background: #13161f; }
+
+#log-body {
+  height: 220px;
+  overflow-y: auto;
+  padding: 8px 16px;
+}
+#log-body.collapsed { display: none; }
+
+#log-content {
+  font-size: 0.75rem;
+  color: #8cb4d4;
+  white-space: pre-wrap;
+  word-break: break-all;
+  margin: 0;
+  line-height: 1.6;
+}
+
+/* Color por nivel */
+#log-content .log-error   { color: #f87171; }
+#log-content .log-warning { color: #fbbf24; }
+#log-content .log-info    { color: #8cb4d4; }
+
+/* Espacio para que el panel no tape la tabla */
+body { padding-bottom: 260px; }
+
 /* Modal */
 .hidden { display: none !important; }
 .modal-wide { width: 760px; }
