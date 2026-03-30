@@ -164,6 +164,8 @@ tbody td {
 .btn-record:hover { background: #dc2626; }
 .btn-thumb  { background: #7c3aed; color: #fff; }
 .btn-thumb:hover { background: #6d28d9; }
+.btn-ai     { background: #0ea5e9; color: #fff; }
+.btn-ai:hover { background: #0284c7; }
 
 /* Modal */
 .hidden { display: none !important; }

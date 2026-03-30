@@ -136,6 +136,36 @@ def update_replay(row_id: int):
     return jsonify({"ok": True})
 
 
+@bp.route("/api/replays/<int:row_id>/generate-metadata", methods=["POST"])
+def generate_metadata(row_id: int):
+    from postprocess.ai_metadata import generate_metadata as gen
+
+    with get_connection() as conn:
+        row = conn.execute("SELECT * FROM replays WHERE id = ?", (row_id,)).fetchone()
+    if not row:
+        return jsonify({"error": "not found"}), 404
+
+    try:
+        meta = gen(
+            deck1=row["deck1"] or "",
+            deck2=row["deck2"] or "",
+            label_left=row["label_left"] or "DUELINGBOOK",
+            label_right=row["label_right"] or "HIGH RATED",
+        )
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+    # Save to DB
+    with get_connection() as conn:
+        conn.execute("""
+            UPDATE replays SET title=?, description=?, tags=?, updated_at=datetime('now')
+            WHERE id=?
+        """, (meta["title"], meta["description"], meta["tags"], row_id))
+        conn.commit()
+
+    return jsonify({"ok": True, **meta})
+
+
 @bp.route("/api/replays/<int:row_id>/record", methods=["POST"])
 def record_replay(row_id: int):
     with get_connection() as conn:

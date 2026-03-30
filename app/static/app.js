@@ -81,6 +81,7 @@ function renderTable(rows) {
       <td class="actions-cell">
         ${r.status === "pending" ? `<button class="btn-record" onclick="startRecording(${r.id})">⏺ Grabar</button>` : ""}
         ${r.status === "recorded" ? `<button class="btn-thumb" onclick="generateThumbnail(${r.id})">🖼 Thumbnail</button>` : ""}
+        ${["recorded","thumbnail_ready"].includes(r.status) ? `<button class="btn-ai" onclick="generateMetadata(${r.id})">🤖 IA</button>` : ""}
         ${r.status === "thumbnail_ready" ? `<button class="btn-thumb" onclick="showThumbnail(${r.id}, '${r.replay_id}')">🖼 Ver</button><button class="btn-record" onclick="regenerateThumbnail(${r.id})">↺ Regenerar</button>` : ""}
         <button class="btn-edit" onclick="openEditModal(${r.id})">Editar</button>
       </td>
@@ -218,6 +219,28 @@ function pollWhileRecording() {
       _pollInterval = null;
     }
   }, 5000);
+}
+
+// ------------------------------------------------------------------
+// AI Metadata
+// ------------------------------------------------------------------
+async function generateMetadata(id) {
+  if (!confirm("¿Generar título, descripción y tags con IA? Esto sobreescribirá los campos actuales.")) return;
+
+  const btn = event.target;
+  btn.textContent = "⏳ Generando...";
+  btn.disabled = true;
+
+  const res = await fetch(`/api/replays/${id}/generate-metadata`, { method: "POST" });
+  const data = await res.json();
+
+  btn.textContent = "🤖 IA";
+  btn.disabled = false;
+
+  if (!res.ok) { alert(data.error || "Error al generar metadata"); return; }
+
+  alert(`✅ Metadata generada:\n\nTÍTULO:\n${data.title}\n\nTAGS:\n${data.tags}`);
+  loadReplays();
 }
 
 // ------------------------------------------------------------------
