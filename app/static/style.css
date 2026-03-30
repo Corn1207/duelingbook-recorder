@@ -69,6 +69,35 @@ header h1 {
 }
 .filter-date:focus { outline: none; border-color: #3b82f6; }
 
+.search-input {
+  background: #2a2d3a;
+  border: 1px solid #3a3d4a;
+  color: #e0e0e0;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  width: 180px;
+}
+.search-input:focus { outline: none; border-color: #3b82f6; }
+
+.pagination {
+  display: flex;
+  gap: 6px;
+  padding: 10px 0;
+  flex-wrap: wrap;
+}
+.page-btn {
+  background: #2a2d3a;
+  border: 1px solid #3a3d4a;
+  color: #e0e0e0;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+.page-btn:hover { border-color: #3b82f6; }
+.page-btn-active { background: #3b82f6; border-color: #3b82f6; color: #fff; }
+
 /* Stats bar */
 .stats-bar {
   display: flex;
@@ -241,7 +270,8 @@ body { padding-bottom: 260px; }
   padding: 24px;
 }
 
-#modal-overlay {
+#modal-overlay,
+#decks-overlay {
   position: fixed;
   inset: 0;
   background: rgba(0,0,0,0.7);

@@ -11,6 +11,7 @@
 <header>
   <h1>Duelingbook Recorder</h1>
   <div class="header-actions">
+    <input type="text" id="replay-search" class="search-input" placeholder="🔍 Buscar replay...">
     <label class="filter-label">Desde</label>
     <input type="date" id="filter-from" class="filter-date">
     <label class="filter-label">Hasta</label>
@@ -49,6 +50,7 @@
       <tr><td colspan="8" class="empty">Cargando...</td></tr>
     </tbody>
   </table>
+  <div id="replay-pagination" class="pagination"></div>
 </div>
 
 <!-- Replay Modal -->
@@ -160,6 +162,8 @@
     </div>
     <button class="btn btn-success" id="btn-add-deck-card" style="margin-bottom:20px">+ Agregar carta</button>
 
+    <input type="text" id="deck-search" class="search-input" placeholder="🔍 Buscar deck o carta..." style="margin-bottom:12px;width:100%;box-sizing:border-box">
+
     <table id="decks-table">
       <thead>
         <tr>
@@ -172,6 +176,7 @@
         <tr><td colspan="3" class="empty">Cargando...</td></tr>
       </tbody>
     </table>
+    <div id="deck-pagination" class="pagination" style="margin-top:12px"></div>
   </div>
 </div>
 
@@ -193,10 +198,10 @@
     <div style="display:flex;gap:10px;align-items:center">
       <span id="log-status" style="font-size:0.75rem;color:#666"></span>
       <button class="btn btn-week" style="padding:3px 10px;font-size:0.75rem" onclick="event.stopPropagation();clearLogs()">Limpiar</button>
-      <span id="log-chevron">▲</span>
+      <span id="log-chevron">▼</span>
     </div>
   </div>
-  <div id="log-body">
+  <div id="log-body" class="collapsed">
     <pre id="log-content">Cargando logs...</pre>
   </div>
 </div>

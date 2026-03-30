@@ -23,6 +23,12 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("btn-close-modal").addEventListener("click", closeModal);
   document.getElementById("field-replay-id").addEventListener("paste", extractIdFromUrl);
 
+  // Replay search
+  document.getElementById("replay-search").addEventListener("input", () => {
+    _replayPage = 1;
+    renderTable(_allReplays);
+  });
+
   // Decks modal
   document.getElementById("btn-open-decks").addEventListener("click", openDecksModal);
   document.getElementById("btn-close-decks").addEventListener("click", closeDecksModal);
@@ -30,6 +36,12 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("new-card-name").addEventListener("input", onCardInput);
   document.getElementById("new-card-name").addEventListener("blur", () => {
     setTimeout(() => document.getElementById("card-autocomplete").classList.add("hidden"), 200);
+  });
+
+  // Deck search
+  document.getElementById("deck-search").addEventListener("input", () => {
+    _deckPage = 1;
+    renderDecksTable(_allDecks);
   });
 });
 
@@ -48,14 +60,19 @@ function extractIdFromUrl(e) {
 // ------------------------------------------------------------------
 // Load & render replays
 // ------------------------------------------------------------------
+let _allReplays = [];
+let _replayPage = 1;
+const REPLAY_PAGE_SIZE = 20;
+
 async function loadReplays(from = null, to = null) {
   const params = new URLSearchParams();
   if (from) params.set("from", from);
   if (to)   params.set("to", to);
   const url = "/api/replays" + (params.toString() ? "?" + params : "");
-  const rows = await fetch(url).then(r => r.json());
-  renderTable(rows);
-  renderStats(rows);
+  _allReplays = await fetch(url).then(r => r.json());
+  _replayPage = 1;
+  renderTable(_allReplays);
+  renderStats(_allReplays);
 }
 
 function applyFilter() {
@@ -65,31 +82,50 @@ function applyFilter() {
 }
 
 function renderTable(rows) {
+  const q = (document.getElementById("replay-search").value || "").toLowerCase().trim();
+  const filtered = q
+    ? rows.filter(r =>
+        (r.replay_id || "").toLowerCase().includes(q) ||
+        (r.deck1     || "").toLowerCase().includes(q) ||
+        (r.deck2     || "").toLowerCase().includes(q) ||
+        (r.title     || "").toLowerCase().includes(q)
+      )
+    : rows;
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / REPLAY_PAGE_SIZE));
+  if (_replayPage > totalPages) _replayPage = totalPages;
+  const start = (_replayPage - 1) * REPLAY_PAGE_SIZE;
+  const page  = filtered.slice(start, start + REPLAY_PAGE_SIZE);
+
   const tbody = document.getElementById("replays-body");
-  if (!rows.length) {
-    tbody.innerHTML = '<tr><td colspan="8" class="empty">No hay replays. Agrega uno con el botón +</td></tr>';
-    return;
+  if (!filtered.length) {
+    tbody.innerHTML = '<tr><td colspan="8" class="empty">No hay replays.</td></tr>';
+  } else {
+    tbody.innerHTML = page.map(r => `
+      <tr>
+        <td>${r.scheduled_date || "—"}</td>
+        <td><code>${r.replay_id}</code></td>
+        <td>${r.deck1 || "—"}</td>
+        <td>${r.deck2 || "—"}</td>
+        <td>${r.title || "—"}</td>
+        <td><span class="badge badge-${r.status}">${statusLabel(r.status)}</span></td>
+        <td>${r.youtube_url ? `<a class="yt-link" href="${r.youtube_url}" target="_blank">▶ Ver</a>` : "—"}</td>
+        <td class="actions-cell">
+          ${r.status === "pending" ? `<button class="btn-record" onclick="startRecording(${r.id})">⏺ Grabar</button>` : ""}
+          ${r.status === "recorded" ? `<button class="btn-thumb" onclick="generateThumbnail(${r.id})">🖼 Thumbnail</button>` : ""}
+          ${["recorded","thumbnail_ready"].includes(r.status) ? `<button class="btn-ai" onclick="generateMetadata(${r.id})">🤖 IA</button>` : ""}
+          ${r.status === "thumbnail_ready" ? `<button class="btn-thumb" onclick="showThumbnail(${r.id}, '${r.replay_id}')">🖼 Ver</button><button class="btn-record" onclick="regenerateThumbnail(${r.id})">↺ Regenerar</button>` : ""}
+          ${r.status === "thumbnail_ready" ? `<button class="btn-upload" onclick="uploadToYouTube(${r.id})">▶ YouTube</button>` : ""}
+          <button class="btn-edit" onclick="openEditModal(${r.id})">Editar</button>
+        </td>
+      </tr>
+    `).join("");
   }
 
-  tbody.innerHTML = rows.map(r => `
-    <tr>
-      <td>${r.scheduled_date || "—"}</td>
-      <td><code>${r.replay_id}</code></td>
-      <td>${r.deck1 || "—"}</td>
-      <td>${r.deck2 || "—"}</td>
-      <td>${r.title || "—"}</td>
-      <td><span class="badge badge-${r.status}">${statusLabel(r.status)}</span></td>
-      <td>${r.youtube_url ? `<a class="yt-link" href="${r.youtube_url}" target="_blank">▶ Ver</a>` : "—"}</td>
-      <td class="actions-cell">
-        ${r.status === "pending" ? `<button class="btn-record" onclick="startRecording(${r.id})">⏺ Grabar</button>` : ""}
-        ${r.status === "recorded" ? `<button class="btn-thumb" onclick="generateThumbnail(${r.id})">🖼 Thumbnail</button>` : ""}
-        ${["recorded","thumbnail_ready"].includes(r.status) ? `<button class="btn-ai" onclick="generateMetadata(${r.id})">🤖 IA</button>` : ""}
-        ${r.status === "thumbnail_ready" ? `<button class="btn-thumb" onclick="showThumbnail(${r.id}, '${r.replay_id}')">🖼 Ver</button><button class="btn-record" onclick="regenerateThumbnail(${r.id})">↺ Regenerar</button>` : ""}
-        ${r.status === "thumbnail_ready" ? `<button class="btn-upload" onclick="uploadToYouTube(${r.id})">▶ YouTube</button>` : ""}
-        <button class="btn-edit" onclick="openEditModal(${r.id})">Editar</button>
-      </td>
-    </tr>
-  `).join("");
+  renderPagination("replay-pagination", _replayPage, totalPages, (p) => {
+    _replayPage = p;
+    renderTable(_allReplays);
+  });
 }
 
 function renderStats(rows) {
@@ -347,7 +383,7 @@ function showThumbnail(id, replayId) {
 // ------------------------------------------------------------------
 // Log Panel
 // ------------------------------------------------------------------
-let _logCollapsed = false;
+let _logCollapsed = true;
 
 async function loadLogs() {
   const lines = await fetch("/api/logs?lines=200").then(r => r.json());
@@ -421,6 +457,10 @@ async function loadDeckOptions() {
   datalist.innerHTML = names.map(n => `<option value="${n}">`).join("");
 }
 
+let _allDecks = [];
+let _deckPage = 1;
+const DECK_PAGE_SIZE = 20;
+
 async function openDecksModal() {
   await loadDecksTable();
   document.getElementById("decks-overlay").classList.remove("hidden");
@@ -432,22 +472,45 @@ function closeDecksModal() {
 }
 
 async function loadDecksTable() {
-  const rows = await fetch("/api/decks").then(r => r.json());
+  _allDecks = await fetch("/api/decks").then(r => r.json());
+  _deckPage = 1;
+  renderDecksTable(_allDecks);
+}
+
+function renderDecksTable(rows) {
+  const q = (document.getElementById("deck-search").value || "").toLowerCase().trim();
+  const filtered = q
+    ? rows.filter(r =>
+        (r.deck_name || "").toLowerCase().includes(q) ||
+        (r.card_name || "").toLowerCase().includes(q)
+      )
+    : rows;
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / DECK_PAGE_SIZE));
+  if (_deckPage > totalPages) _deckPage = totalPages;
+  const start = (_deckPage - 1) * DECK_PAGE_SIZE;
+  const page  = filtered.slice(start, start + DECK_PAGE_SIZE);
+
   const tbody = document.getElementById("decks-body");
-  if (!rows.length) {
-    tbody.innerHTML = '<tr><td colspan="3" class="empty">No hay decks. Agrega uno arriba.</td></tr>';
-    return;
+  if (!filtered.length) {
+    tbody.innerHTML = '<tr><td colspan="3" class="empty">No hay decks.</td></tr>';
+  } else {
+    tbody.innerHTML = page.map(r => `
+      <tr id="deck-row-${r.id}">
+        <td><span id="deck-name-${r.id}">${r.deck_name}</span></td>
+        <td><span id="card-name-${r.id}">${r.card_name}</span></td>
+        <td class="actions-cell">
+          <button class="btn-edit" onclick="editDeckCard(${r.id}, '${r.deck_name.replace(/'/g,"\\'")}', '${r.card_name.replace(/'/g,"\\'")}')">Editar</button>
+          <button class="btn-edit" onclick="deleteDeckCard(${r.id})">Eliminar</button>
+        </td>
+      </tr>
+    `).join("");
   }
-  tbody.innerHTML = rows.map(r => `
-    <tr id="deck-row-${r.id}">
-      <td><span id="deck-name-${r.id}">${r.deck_name}</span></td>
-      <td><span id="card-name-${r.id}">${r.card_name}</span></td>
-      <td class="actions-cell">
-        <button class="btn-edit" onclick="editDeckCard(${r.id}, '${r.deck_name.replace(/'/g,"\\'")}', '${r.card_name.replace(/'/g,"\\'")}')">Editar</button>
-        <button class="btn-edit" onclick="deleteDeckCard(${r.id})">Eliminar</button>
-      </td>
-    </tr>
-  `).join("");
+
+  renderPagination("deck-pagination", _deckPage, totalPages, (p) => {
+    _deckPage = p;
+    renderDecksTable(_allDecks);
+  });
 }
 
 async function addDeckCard() {
@@ -463,7 +526,7 @@ async function addDeckCard() {
   if (!res.ok) { alert("Error al agregar"); return; }
   document.getElementById("new-deck-name").value = "";
   document.getElementById("new-card-name").value = "";
-  loadDecksTable();
+  await loadDecksTable();
 }
 
 function editDeckCard(id, deckName, cardName) {
@@ -473,7 +536,7 @@ function editDeckCard(id, deckName, cardName) {
     <td><input type="text" id="edit-card-${id}" value="${cardName}" style="width:100%"></td>
     <td class="actions-cell">
       <button class="btn-success btn" onclick="saveDeckCard(${id})">Guardar</button>
-      <button class="btn-edit" onclick="loadDecksTable()">Cancelar</button>
+      <button class="btn-edit" onclick="renderDecksTable(_allDecks)">Cancelar</button>
     </td>
   `;
 }
@@ -487,12 +550,29 @@ async function saveDeckCard(id) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ deck_name, card_name }),
   });
-  loadDecksTable();
+  await loadDecksTable();
   loadDeckOptions();
 }
 
 async function deleteDeckCard(id) {
   if (!confirm("¿Eliminar esta carta?")) return;
   await fetch(`/api/decks/${id}`, { method: "DELETE" });
-  loadDecksTable();
+  await loadDecksTable();
+}
+
+// ------------------------------------------------------------------
+// Pagination helper
+// ------------------------------------------------------------------
+function renderPagination(containerId, currentPage, totalPages, onPageClick) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  if (totalPages <= 1) { container.innerHTML = ""; return; }
+
+  const pages = [];
+  for (let i = 1; i <= totalPages; i++) {
+    pages.push(
+      `<button class="page-btn${i === currentPage ? " page-btn-active" : ""}" onclick="(${onPageClick.toString()})(${i})">${i}</button>`
+    );
+  }
+  container.innerHTML = pages.join("");
 }
