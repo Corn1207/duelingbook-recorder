@@ -116,6 +116,8 @@ class ReplayBrowser:
     def close(self) -> None:
         """Closes the browser context and stops Playwright. Safe to call multiple times."""
         try:
+            if self.page:
+                self.page.close()
             if self._context:
                 self._context.close()
             if self._playwright:

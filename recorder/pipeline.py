@@ -20,6 +20,8 @@ Usage:
 """
 
 import logging
+import subprocess
+import time
 from pathlib import Path
 
 from recorder.browser import ReplayBrowser
@@ -69,11 +71,14 @@ class RecordingPipeline:
 
             with ReplayBrowser() as browser:
                 page = browser.open(replay_id)
-                obs.start_recording()
 
                 try:
                     monitor = ReplayMonitor(page)
                     monitor.wait_for_replay_start()
+                    _set_do_not_disturb(True)
+                    obs.start_recording()
+                    logger.info("Waiting 2s for OBS to start recording...")
+                    time.sleep(2)
                     monitor.run()
                 except Exception as e:
                     logger.error(f"Error during replay playback: {e}")
@@ -82,6 +87,7 @@ class RecordingPipeline:
                     if obs.is_recording():
                         raw_path = obs.stop_recording()
                         logger.info(f"Raw recording saved: {raw_path}")
+                    _set_do_not_disturb(False)
 
         # Add outro image with cross dissolve (before music so music covers full duration)
         logger.info("Adding outro...")
@@ -102,3 +108,30 @@ class RecordingPipeline:
 
         logger.info(f"Done. Final video: {final_path}")
         return final_path
+
+
+def _set_do_not_disturb(enabled: bool) -> None:
+    """Enables or disables macOS Do Not Disturb via osascript (macOS 12+)."""
+    action = "on" if enabled else "off"
+    script = (
+        'tell application "System Events"\n'
+        '  tell process "Control Center"\n'
+        f'    keystroke "{action}"\n'
+        '  end tell\n'
+        'end tell'
+    )
+    # Use Focus/DND via the defaults domain — works without UI automation
+    key = "1" if enabled else "0"
+    try:
+        subprocess.run(
+            ["defaults", "-currentHost", "write", "com.apple.notificationcenterui",
+             "doNotDisturb", "-bool", "true" if enabled else "false"],
+            capture_output=True, timeout=5
+        )
+        subprocess.run(
+            ["killall", "NotificationCenter"],
+            capture_output=True, timeout=5
+        )
+        logger.info(f"Do Not Disturb: {'enabled' if enabled else 'disabled'}")
+    except Exception as e:
+        logger.warning(f"Could not set Do Not Disturb: {e}")

@@ -23,6 +23,12 @@
   </div>
 </header>
 
+<!-- Tabs -->
+<div class="tabs">
+  <button class="tab-btn active" id="tab-active" onclick="switchTab('active')">⚡ En progreso</button>
+  <button class="tab-btn" id="tab-uploaded" onclick="switchTab('uploaded')">✅ Subidos</button>
+</div>
+
 <!-- Stats bar -->
 <div class="stats-bar">
   <span class="stat pending">⏳ Pendiente: <b id="count-pending">0</b></span>
@@ -128,6 +134,13 @@
         <input type="text" id="field-youtube-url" placeholder="https://youtube.com/watch?v=...">
       </div>
 
+      <div class="form-row">
+        <div class="form-group">
+          <label>Publicar en YouTube el</label>
+          <input type="datetime-local" id="field-publish-at">
+        </div>
+      </div>
+
       <div class="form-group">
         <label>Notas</label>
         <textarea id="field-notes" rows="2" placeholder="Notas personales..."></textarea>
@@ -177,6 +190,57 @@
       </tbody>
     </table>
     <div id="deck-pagination" class="pagination" style="margin-top:12px"></div>
+  </div>
+</div>
+
+<!-- Privacy Modal -->
+<div id="privacy-overlay" class="hidden">
+  <div class="modal" style="width:360px">
+    <div class="modal-header">
+      <h2>Subir a YouTube</h2>
+      <button class="btn-close" onclick="document.getElementById('privacy-overlay').classList.add('hidden')">✕</button>
+    </div>
+    <p style="color:#aaa;font-size:0.85rem;margin-bottom:16px">Selecciona la privacidad del video:</p>
+    <div id="publish-at-info" style="display:none;background:#1e2d1e;border:1px solid #2d5a2d;border-radius:6px;padding:10px 14px;margin-bottom:14px;font-size:0.82rem;color:#6fcf6f">
+      📅 Publicación programada: <strong id="publish-at-display"></strong><br>
+      <span style="color:#aaa">El video se subirá como privado y se publicará automáticamente en esa fecha.</span>
+    </div>
+    <div class="privacy-options">
+      <label class="privacy-option">
+        <input type="radio" name="privacy" value="private" checked>
+        <div class="privacy-card">
+          <span class="privacy-icon">🔒</span>
+          <div>
+            <div class="privacy-title">Privado</div>
+            <div class="privacy-desc">Solo tú puedes verlo</div>
+          </div>
+        </div>
+      </label>
+      <label class="privacy-option">
+        <input type="radio" name="privacy" value="unlisted">
+        <div class="privacy-card">
+          <span class="privacy-icon">🔗</span>
+          <div>
+            <div class="privacy-title">No listado</div>
+            <div class="privacy-desc">Solo con el link</div>
+          </div>
+        </div>
+      </label>
+      <label class="privacy-option">
+        <input type="radio" name="privacy" value="public">
+        <div class="privacy-card">
+          <span class="privacy-icon">🌐</span>
+          <div>
+            <div class="privacy-title">Público</div>
+            <div class="privacy-desc">Visible para todos</div>
+          </div>
+        </div>
+      </label>
+    </div>
+    <div class="modal-actions" style="margin-top:20px">
+      <button class="btn btn-week" onclick="document.getElementById('privacy-overlay').classList.add('hidden')">Cancelar</button>
+      <button class="btn btn-success" id="btn-confirm-upload">Subir</button>
+    </div>
   </div>
 </div>
 

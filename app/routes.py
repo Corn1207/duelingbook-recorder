@@ -169,7 +169,7 @@ def create_replay():
 def update_replay(row_id: int):
     data = request.json or {}
     fields = ["deck1", "deck2", "label_left", "label_right", "title", "description",
-              "tags", "notes", "scheduled_date", "status", "video_path", "thumbnail_path", "youtube_url"]
+              "tags", "notes", "scheduled_date", "publish_at", "status", "video_path", "thumbnail_path", "youtube_url"]
     updates = {k: data[k] for k in fields if k in data}
     if not updates:
         return jsonify({"error": "nothing to update"}), 400
@@ -201,6 +201,7 @@ def generate_metadata(row_id: int):
             deck2=row["deck2"] or "",
             label_left=row["label_left"] or "DUELINGBOOK",
             label_right=row["label_right"] or "HIGH RATED",
+            notes=row["notes"] or "",
         )
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -253,6 +254,30 @@ def delete_replay(row_id: int):
     return jsonify({"ok": True})
 
 
+def _cleanup_intermediates(final_video_path: str) -> None:
+    """Deletes raw and outro intermediate files after a successful YouTube upload."""
+    if not final_video_path:
+        return
+    final = Path(final_video_path)
+    base = final.stem.replace("_final", "")
+
+    candidates = [
+        # Raw OBS recording
+        Path("output/raw") / f"{base}.mp4",
+        # Outro intermediate
+        final.parent / f"{base}_outro.mp4",
+    ]
+    for p in candidates:
+        if not p.is_absolute():
+            p = Path(__file__).parent.parent / p
+        try:
+            if p.exists():
+                p.unlink()
+                logging.getLogger(__name__).info(f"Deleted intermediate: {p}")
+        except Exception as e:
+            logging.getLogger(__name__).warning(f"Could not delete {p}: {e}")
+
+
 def _run_upload(row_id: int, row, privacy: str) -> None:
     from postprocess.youtube_uploader import upload_video
 
@@ -269,6 +294,7 @@ def _run_upload(row_id: int, row, privacy: str) -> None:
             tags=row["tags"] or "",
             thumbnail_path=row["thumbnail_path"] or None,
             privacy=privacy,
+            publish_at=row["publish_at"] or None,
             progress_callback=on_progress,
         )
         _upload_progress[row_id].update({"pct": 100, "done": True, "url": yt_url})
@@ -279,6 +305,9 @@ def _run_upload(row_id: int, row, privacy: str) -> None:
             )
             conn.commit()
         logger.info(f"Upload complete for replay id={row_id}: {yt_url}")
+
+        # Delete intermediate files now that the video is safely on YouTube
+        _cleanup_intermediates(row["video_path"])
     except Exception as e:
         import traceback
         logger.error(f"Upload failed for replay id={row_id}: {e}", exc_info=True)

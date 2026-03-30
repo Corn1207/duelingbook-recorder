@@ -53,4 +53,6 @@ def init_db() -> None:
             conn.execute("ALTER TABLE replays ADD COLUMN label_left TEXT DEFAULT 'DUELINGBOOK'")
         if "label_right" not in existing:
             conn.execute("ALTER TABLE replays ADD COLUMN label_right TEXT DEFAULT 'HIGH RATED'")
+        if "publish_at" not in existing:
+            conn.execute("ALTER TABLE replays ADD COLUMN publish_at TEXT")
         conn.commit()

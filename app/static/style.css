@@ -98,6 +98,34 @@ header h1 {
 .page-btn:hover { border-color: #3b82f6; }
 .page-btn-active { background: #3b82f6; border-color: #3b82f6; color: #fff; }
 
+/* Tabs */
+.tabs {
+  display: flex;
+  gap: 4px;
+  padding: 12px 24px 0;
+  border-bottom: 1px solid #2a2d3a;
+  background: #0f1117;
+}
+.tab-btn {
+  padding: 8px 20px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: 6px 6px 0 0;
+  color: #888;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  position: relative;
+  bottom: -1px;
+}
+.tab-btn:hover { color: #e0e0e0; }
+.tab-btn.active {
+  background: #1a1d27;
+  border-color: #2a2d3a;
+  color: #fff;
+}
+
 /* Stats bar */
 .stats-bar {
   display: flex;
@@ -191,12 +219,44 @@ tbody td {
 .btn-edit:hover { background: #3b82f6; color: #fff; }
 .btn-record { background: #ef4444; color: #fff; }
 .btn-record:hover { background: #dc2626; }
+.btn-rerecord { background: #f97316; color: #fff; }
+.btn-rerecord:hover { background: #ea580c; }
 .btn-thumb  { background: #7c3aed; color: #fff; }
 .btn-thumb:hover { background: #6d28d9; }
 .btn-ai     { background: #0ea5e9; color: #fff; }
 .btn-ai:hover { background: #0284c7; }
 .btn-upload { background: #ff0000; color: #fff; border: none; padding: 5px 10px; border-radius: 5px; cursor: pointer; font-size: 0.8rem; font-weight: 600; }
 .btn-upload:hover { background: #cc0000; }
+
+#privacy-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+.privacy-options { display: flex; flex-direction: column; gap: 8px; }
+.privacy-option { cursor: pointer; }
+.privacy-option input[type="radio"] { display: none; }
+.privacy-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border: 2px solid #2a2d3a;
+  border-radius: 8px;
+  transition: border-color 0.15s;
+}
+.privacy-card:hover { border-color: #3b82f6; }
+.privacy-option input[type="radio"]:checked + .privacy-card {
+  border-color: #3b82f6;
+  background: #1e2d4a;
+}
+.privacy-icon { font-size: 1.4rem; }
+.privacy-title { font-weight: 600; font-size: 0.9rem; }
+.privacy-desc { font-size: 0.75rem; color: #888; margin-top: 2px; }
 
 /* Log Panel */
 #log-panel {

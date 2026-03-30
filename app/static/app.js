@@ -62,6 +62,7 @@ function extractIdFromUrl(e) {
 // ------------------------------------------------------------------
 let _allReplays = [];
 let _replayPage = 1;
+let _activeTab = "active";
 const REPLAY_PAGE_SIZE = 20;
 
 async function loadReplays(from = null, to = null) {
@@ -81,16 +82,28 @@ function applyFilter() {
   loadReplays(from || null, to || null);
 }
 
+function switchTab(tab) {
+  _activeTab = tab;
+  _replayPage = 1;
+  document.getElementById("tab-active").classList.toggle("active", tab === "active");
+  document.getElementById("tab-uploaded").classList.toggle("active", tab === "uploaded");
+  renderTable(_allReplays);
+}
+
 function renderTable(rows) {
+  const tabFiltered = _activeTab === "uploaded"
+    ? rows.filter(r => r.status === "uploaded")
+    : rows.filter(r => r.status !== "uploaded");
+
   const q = (document.getElementById("replay-search").value || "").toLowerCase().trim();
   const filtered = q
-    ? rows.filter(r =>
+    ? tabFiltered.filter(r =>
         (r.replay_id || "").toLowerCase().includes(q) ||
         (r.deck1     || "").toLowerCase().includes(q) ||
         (r.deck2     || "").toLowerCase().includes(q) ||
         (r.title     || "").toLowerCase().includes(q)
       )
-    : rows;
+    : tabFiltered;
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / REPLAY_PAGE_SIZE));
   if (_replayPage > totalPages) _replayPage = totalPages;
@@ -112,6 +125,7 @@ function renderTable(rows) {
         <td>${r.youtube_url ? `<a class="yt-link" href="${r.youtube_url}" target="_blank">▶ Ver</a>` : "—"}</td>
         <td class="actions-cell">
           ${r.status === "pending" ? `<button class="btn-record" onclick="startRecording(${r.id})">⏺ Grabar</button>` : ""}
+          ${!["pending","recording"].includes(r.status) ? `<button class="btn-rerecord" onclick="reRecord(${r.id})">↺ Re-grabar</button>` : ""}
           ${r.status === "recorded" ? `<button class="btn-thumb" onclick="generateThumbnail(${r.id})">🖼 Thumbnail</button>` : ""}
           ${["recorded","thumbnail_ready"].includes(r.status) ? `<button class="btn-ai" onclick="generateMetadata(${r.id})">🤖 IA</button>` : ""}
           ${r.status === "thumbnail_ready" ? `<button class="btn-thumb" onclick="showThumbnail(${r.id}, '${r.replay_id}')">🖼 Ver</button><button class="btn-record" onclick="regenerateThumbnail(${r.id})">↺ Regenerar</button>` : ""}
@@ -135,6 +149,10 @@ function renderStats(rows) {
   document.getElementById("count-recorded").textContent  = counts.recorded;
   document.getElementById("count-thumbnail").textContent = counts.thumbnail_ready;
   document.getElementById("count-uploaded").textContent  = counts.uploaded;
+
+  const activeCount = rows.filter(r => r.status !== "uploaded").length;
+  document.getElementById("tab-active").textContent   = `⚡ En progreso (${activeCount})`;
+  document.getElementById("tab-uploaded").textContent = `✅ Subidos (${counts.uploaded})`;
 }
 
 function statusLabel(s) {
@@ -151,6 +169,7 @@ function openAddModal() {
   document.getElementById("field-id").value = "";
   document.getElementById("field-label-left").value = "DUELINGBOOK";
   document.getElementById("field-label-right").value = "HIGH RATED";
+  document.getElementById("field-publish-at").value = "";
   document.getElementById("btn-delete").style.display = "none";
   document.getElementById("field-replay-id").disabled = false;
   document.getElementById("group-status").style.display = "none";
@@ -177,6 +196,7 @@ async function openEditModal(id) {
   document.getElementById("field-tags").value = row.tags || "";
   document.getElementById("field-notes").value = row.notes || "";
   document.getElementById("field-date").value = row.scheduled_date || "";
+  document.getElementById("field-publish-at").value = row.publish_at || "";
   document.getElementById("field-status").value = row.status || "pending";
   document.getElementById("field-youtube-url").value = row.youtube_url || "";
   document.getElementById("btn-delete").style.display = "inline-block";
@@ -203,6 +223,7 @@ async function saveReplay(e) {
     tags:           document.getElementById("field-tags").value.trim(),
     notes:          document.getElementById("field-notes").value.trim(),
     scheduled_date: document.getElementById("field-date").value || null,
+    publish_at:     document.getElementById("field-publish-at").value || null,
     status:         document.getElementById("field-status").value,
     youtube_url:    document.getElementById("field-youtube-url").value.trim(),
   };
@@ -237,8 +258,18 @@ async function deleteReplay() {
 // ------------------------------------------------------------------
 // Recording
 // ------------------------------------------------------------------
-async function startRecording(id) {
-  if (!confirm("¿Iniciar grabación? La pantalla será capturada por OBS.")) return;
+async function reRecord(id) {
+  if (!confirm("¿Re-grabar este replay? El video anterior será reemplazado.")) return;
+  await fetch(`/api/replays/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ status: "pending" }),
+  });
+  await startRecording(id, false);
+}
+
+async function startRecording(id, askConfirm = true) {
+  if (askConfirm && !confirm("¿Iniciar grabación? La pantalla será capturada por OBS.")) return;
   const res = await fetch(`/api/replays/${id}/record`, { method: "POST" });
   const data = await res.json();
   if (!res.ok) { alert(data.error || "Error al iniciar grabación"); return; }
@@ -285,17 +316,33 @@ async function generateMetadata(id) {
 // ------------------------------------------------------------------
 // YouTube Upload
 // ------------------------------------------------------------------
-async function uploadToYouTube(id) {
-  const privacy = prompt("Privacidad del video:\n  private — solo tú\n  unlisted — con link\n  public — público\n\nEscribe una opción:", "private");
-  if (!privacy) return;
-  if (!["private", "unlisted", "public"].includes(privacy)) {
-    alert("Opción inválida. Usa: private, unlisted o public");
-    return;
-  }
-  if (!confirm(`¿Subir a YouTube como "${privacy}"? Esto abrirá el navegador para autorizar si es la primera vez.`)) return;
+function uploadToYouTube(id) {
+  // Reset radio to default
+  document.querySelector('input[name="privacy"][value="private"]').checked = true;
 
-  const btn = event.target;
-  btn.disabled = true;
+  // Show publish_at info if set
+  const row = _allReplays.find(r => r.id === id);
+  const infoBox = document.getElementById("publish-at-info");
+  const infoDisplay = document.getElementById("publish-at-display");
+  if (row && row.publish_at) {
+    infoDisplay.textContent = new Date(row.publish_at).toLocaleString();
+    infoBox.style.display = "block";
+  } else {
+    infoBox.style.display = "none";
+  }
+
+  const overlay = document.getElementById("privacy-overlay");
+  overlay.classList.remove("hidden");
+
+  document.getElementById("btn-confirm-upload").onclick = async () => {
+    const privacy = document.querySelector('input[name="privacy"]:checked').value;
+    overlay.classList.add("hidden");
+    await _doUpload(id, privacy);
+  };
+}
+
+async function _doUpload(id, privacy) {
+  const barId = `upload-bar-${id}`;
 
   // Start upload
   const res = await fetch(`/api/replays/${id}/upload`, {
@@ -305,22 +352,23 @@ async function uploadToYouTube(id) {
   });
   const data = await res.json();
   if (!res.ok) {
-    btn.disabled = false;
     alert(data.error || "Error al subir");
     return;
   }
 
-  // Show progress bar in the button cell
-  const cell = btn.closest("td");
-  const barId = `upload-bar-${id}`;
-  cell.insertAdjacentHTML("beforeend", `
-    <div id="${barId}" style="margin-top:6px;width:120px">
-      <div style="background:#2a2d3a;border-radius:4px;height:6px;overflow:hidden">
-        <div id="${barId}-fill" style="height:6px;background:#ef4444;width:0%;transition:width 0.4s"></div>
+  // Show progress bar below the table row
+  const btn = document.querySelector(`button.btn-upload[onclick="uploadToYouTube(${id})"]`);
+  if (btn) {
+    btn.disabled = true;
+    btn.closest("td").insertAdjacentHTML("beforeend", `
+      <div id="${barId}" style="margin-top:6px;width:120px">
+        <div style="background:#2a2d3a;border-radius:4px;height:6px;overflow:hidden">
+          <div id="${barId}-fill" style="height:6px;background:#ef4444;width:0%;transition:width 0.4s"></div>
+        </div>
+        <div id="${barId}-label" style="font-size:0.7rem;color:#aaa;text-align:center;margin-top:2px">0%</div>
       </div>
-      <div id="${barId}-label" style="font-size:0.7rem;color:#aaa;text-align:center;margin-top:2px">0%</div>
-    </div>
-  `);
+    `);
+  }
 
   // Listen SSE progress
   const evtSource = new EventSource(`/api/replays/${id}/upload/progress`);
@@ -334,7 +382,6 @@ async function uploadToYouTube(id) {
     if (state.done) {
       evtSource.close();
       document.getElementById(barId)?.remove();
-      btn.disabled = false;
       if (state.error) {
         alert("Error al subir: " + state.error);
       } else {
@@ -346,7 +393,6 @@ async function uploadToYouTube(id) {
   evtSource.onerror = () => {
     evtSource.close();
     document.getElementById(barId)?.remove();
-    btn.disabled = false;
   };
 }
 

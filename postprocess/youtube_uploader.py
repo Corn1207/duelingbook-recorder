@@ -55,6 +55,7 @@ def upload_video(
     tags: str,
     thumbnail_path: str = None,
     privacy: str = "private",
+    publish_at: str = None,
     progress_callback=None,
 ) -> str:
     """
@@ -78,17 +79,28 @@ def upload_video(
 
     youtube = _get_youtube_service()
 
+    status_body = {
+        "privacyStatus": privacy,
+        "selfDeclaredMadeForKids": False,
+    }
+    # publishAt requires privacyStatus="private" and an RFC 3339 datetime
+    if publish_at:
+        # Expects "YYYY-MM-DDTHH:MM" from the UI — append seconds and UTC offset
+        if len(publish_at) == 16:
+            publish_at = publish_at + ":00Z"
+        status_body["publishAt"] = publish_at
+        status_body["privacyStatus"] = "private"
+
     body = {
         "snippet": {
             "title": title or "Yu-Gi-Oh! Replay",
             "description": description or "",
             "tags": tag_list,
             "categoryId": "20",  # Gaming
+            "defaultLanguage": "en",
+            "defaultAudioLanguage": "en",
         },
-        "status": {
-            "privacyStatus": privacy,
-            "selfDeclaredMadeForKids": False,
-        },
+        "status": status_body,
     }
 
     media = MediaFileUpload(video_path, mimetype="video/mp4", resumable=True)

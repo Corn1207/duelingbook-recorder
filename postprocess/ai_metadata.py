@@ -31,6 +31,7 @@ def generate_metadata(
     deck2: str,
     label_left: str = "DUELINGBOOK",
     label_right: str = "HIGH RATED",
+    notes: str = "",
 ) -> dict:
     """
     Generates title, description and tags for a Yu-Gi-Oh replay video.
@@ -42,11 +43,13 @@ def generate_metadata(
             "tags": str,   # comma-separated
         }
     """
+    notes_section = f"\nAdditional context from the creator:\n{notes.strip()}\n" if notes and notes.strip() else ""
+
     prompt = f"""
 You are a Yu-Gi-Oh! content expert for YouTube targeting a US audience. Generate compelling metadata for a Duelingbook replay video for the channel "Yugioh Pro Games".
 
 Duel: {deck1} vs {deck2}
-Context: {label_left} | {label_right}
+Context: {label_left} | {label_right}{notes_section}
 
 Generate exactly in this format (no extra text):
 
@@ -55,7 +58,8 @@ TÍTULO:
 
 DESCRIPCIÓN:
 [description here, 3-5 paragraphs, in English. Mention both decks, the context ({label_right}),
-hype up the gameplay, invite viewers to subscribe to "Yugioh Pro Games" and comment their thoughts. Include a timestamps placeholder section and a short note about the Yugioh Pro Games channel.]
+hype up the gameplay, invite viewers to subscribe to "Yugioh Pro Games" and comment their thoughts.
+Do NOT include any timestamps section. End with a short note about the Yugioh Pro Games channel.]
 
 TAGS:
 [comma-separated tags, in English, minimum 15 tags covering yugioh, both decks, duelingbook, current meta]
