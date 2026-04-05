@@ -105,6 +105,8 @@ class ReplayBrowser:
 
         self.page = self._context.new_page()
         self._maximize_to_screen()
+        # Give the browser a moment to settle before navigating
+        time.sleep(1)
         self.page.goto(url, wait_until="domcontentloaded")
 
         logger.info("Page loaded. Waiting for replay controls to be ready...")

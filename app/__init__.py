@@ -29,10 +29,23 @@ def _setup_logging():
         root.addHandler(file_handler)
 
 
+def _recover_stuck_recordings():
+    """Resets any replays stuck in 'recording' state from a previous crashed session."""
+    from app.database import get_connection
+    with get_connection() as conn:
+        affected = conn.execute(
+            "UPDATE replays SET status='pending', updated_at=datetime('now') WHERE status='recording'"
+        ).rowcount
+        conn.commit()
+    if affected:
+        logging.getLogger(__name__).warning(f"Recovered {affected} replay(s) stuck in 'recording' state.")
+
+
 def create_app() -> Flask:
     _setup_logging()
     app = Flask(__name__, template_folder="templates", static_folder="static")
     init_db()
+    _recover_stuck_recordings()
     app.register_blueprint(bp)
 
     @app.route("/thumbnails/<path:filename>")

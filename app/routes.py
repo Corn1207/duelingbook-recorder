@@ -165,14 +165,34 @@ def create_replay():
     return jsonify({"ok": True}), 201
 
 
+STATUS_ORDER = ["pending", "recording", "recorded", "thumbnail_ready", "uploaded"]
+
+
 @bp.route("/api/replays/<int:row_id>", methods=["PUT"])
 def update_replay(row_id: int):
     data = request.json or {}
     fields = ["deck1", "deck2", "label_left", "label_right", "title", "description",
-              "tags", "notes", "scheduled_date", "publish_at", "status", "video_path", "thumbnail_path", "youtube_url"]
+              "tags", "notes", "publish_at", "thumbnail_label1", "thumbnail_label2",
+              "status", "video_path", "thumbnail_path", "youtube_url"]
     updates = {k: data[k] for k in fields if k in data}
+
+    # Derive scheduled_date from publish_at automatically
+    if "publish_at" in updates:
+        pa = updates["publish_at"]
+        updates["scheduled_date"] = pa[:10] if pa else None
     if not updates:
         return jsonify({"error": "nothing to update"}), 400
+
+    # Prevent status from being downgraded if a video is already recorded
+    if "status" in updates:
+        with get_connection() as conn:
+            current = conn.execute("SELECT status, video_path FROM replays WHERE id = ?", (row_id,)).fetchone()
+        if current and current["video_path"]:
+            current_rank = STATUS_ORDER.index(current["status"]) if current["status"] in STATUS_ORDER else 0
+            new_rank     = STATUS_ORDER.index(updates["status"]) if updates["status"] in STATUS_ORDER else 0
+            if new_rank < current_rank:
+                logger.warning(f"Blocked status downgrade for replay {row_id}: {current['status']} → {updates['status']}")
+                del updates["status"]
 
     set_clause = ", ".join(f"{k} = ?" for k in updates)
     values = list(updates.values()) + [row_id]
@@ -197,8 +217,8 @@ def generate_metadata(row_id: int):
 
     try:
         meta = gen(
-            deck1=row["deck1"] or "",
-            deck2=row["deck2"] or "",
+            deck1=row["thumbnail_label1"] or row["deck1"] or "",
+            deck2=row["thumbnail_label2"] or row["deck2"] or "",
             label_left=row["label_left"] or "DUELINGBOOK",
             label_right=row["label_right"] or "HIGH RATED",
             notes=row["notes"] or "",
@@ -262,7 +282,8 @@ def _cleanup_intermediates(final_video_path: str) -> None:
     base = final.stem.replace("_final", "")
 
     candidates = [
-        # Raw OBS recording
+        # Raw OBS recording (OBS saves as .mkv)
+        Path("output/raw") / f"{base}.mkv",
         Path("output/raw") / f"{base}.mp4",
         # Outro intermediate
         final.parent / f"{base}_outro.mp4",
@@ -381,14 +402,18 @@ def generate_thumbnail(row_id: int):
     card1 = pick_card(row["deck1"] or "")
     card2 = pick_card(row["deck2"] or "")
 
+    # Use thumbnail labels if set, otherwise fall back to deck names
+    thumb_deck1 = row["thumbnail_label1"] or row["deck1"] or ""
+    thumb_deck2 = row["thumbnail_label2"] or row["deck2"] or ""
+
     output_path = f"output/thumbnails/{row_id}_{row['replay_id']}.jpg"
 
     try:
         gen = ThumbnailGenerator()
         thumb_path = gen.generate(
-            deck1=row["deck1"] or "",
+            deck1=thumb_deck1,
             card1=card1,
-            deck2=row["deck2"] or "",
+            deck2=thumb_deck2,
             card2=card2,
             label_left=row["label_left"] or "DUELINGBOOK",
             label_right=row["label_right"] or "HIGH RATED",

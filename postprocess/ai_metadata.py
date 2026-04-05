@@ -59,14 +59,17 @@ TÍTULO:
 DESCRIPCIÓN:
 [description here, 3-5 paragraphs, in English. Mention both decks, the context ({label_right}),
 hype up the gameplay, invite viewers to subscribe to "Yugioh Pro Games" and comment their thoughts.
-Do NOT include any timestamps section. End with a short note about the Yugioh Pro Games channel.]
+Do NOT include any timestamps section. End with a short note about the Yugioh Pro Games channel.
+IMPORTANT: Only mention the exact deck names and archetypes provided above. Do NOT invent, assume or add any card names, archetypes or deck combinations that are not explicitly mentioned in the deck names or notes above.]
 
 TAGS:
-[comma-separated tags, in English, minimum 15 tags covering yugioh, both decks, duelingbook, current meta]
+[comma-separated tags, in English, minimum 15 tags covering yugioh, both decks, duelingbook, current meta.
+Only use archetypes and card names from the decks mentioned above.]
 """
 
     client = _get_client()
     logger.info(f"Generating metadata for {deck1} vs {deck2}...")
+    logger.info(f"Prompt sent to AI:\n{prompt}")
     response = client.models.generate_content(model=MODEL, contents=prompt)
     text = response.text
 

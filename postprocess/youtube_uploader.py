@@ -85,9 +85,9 @@ def upload_video(
     }
     # publishAt requires privacyStatus="private" and an RFC 3339 datetime
     if publish_at:
-        # Expects "YYYY-MM-DDTHH:MM" from the UI — append seconds and UTC offset
+        # Expects "YYYY-MM-DDTHH:MM" from the UI — Lima is UTC-5 (no DST)
         if len(publish_at) == 16:
-            publish_at = publish_at + ":00Z"
+            publish_at = publish_at + ":00-05:00"
         status_body["publishAt"] = publish_at
         status_body["privacyStatus"] = "private"
 
@@ -103,7 +103,7 @@ def upload_video(
         "status": status_body,
     }
 
-    media = MediaFileUpload(video_path, mimetype="video/mp4", resumable=True)
+    media = MediaFileUpload(video_path, mimetype="video/mp4", resumable=True, chunksize=5 * 1024 * 1024)  # 5MB chunks
 
     logger.info(f"Uploading {video_path} to YouTube...")
     request = youtube.videos().insert(

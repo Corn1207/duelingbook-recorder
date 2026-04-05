@@ -11,22 +11,36 @@
 <header>
   <h1>Duelingbook Recorder</h1>
   <div class="header-actions">
-    <input type="text" id="replay-search" class="search-input" placeholder="🔍 Buscar replay...">
-    <label class="filter-label">Desde</label>
-    <input type="date" id="filter-from" class="filter-date">
-    <label class="filter-label">Hasta</label>
-    <input type="date" id="filter-to" class="filter-date">
-    <button class="btn btn-primary" id="btn-filter">Filtrar</button>
-    <button class="btn btn-week" id="btn-show-all">Todos</button>
-    <button class="btn btn-decks" id="btn-open-decks">🃏 Decks</button>
-    <button class="btn btn-success" id="btn-add">+ Agregar Replay</button>
+    <input type="text" id="replay-search" class="search-input desktop-only" placeholder="🔍 Buscar replay...">
+    <label class="filter-label desktop-only">Desde</label>
+    <input type="date" id="filter-from" class="filter-date desktop-only">
+    <label class="filter-label desktop-only">Hasta</label>
+    <input type="date" id="filter-to" class="filter-date desktop-only">
+    <button class="btn btn-week desktop-only" id="btn-filter">Filtrar</button>
+    <button class="btn btn-week desktop-only" id="btn-show-all">Todos</button>
+    <button class="btn btn-week mobile-only" id="btn-filters-toggle" onclick="toggleMobileFilters()">🔍 Filtros</button>
+    <button class="btn btn-week" id="btn-open-decks">🃏 Decks</button>
+    <button class="btn btn-primary" id="btn-add">+ Agregar</button>
   </div>
 </header>
+
+<div id="mobile-filters" class="mobile-filters hidden">
+  <input type="text" id="replay-search-mobile" class="search-input" placeholder="🔍 Buscar replay..." style="width:100%">
+  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+    <label class="filter-label">Desde</label>
+    <input type="date" id="filter-from-mobile" class="filter-date">
+    <label class="filter-label">Hasta</label>
+    <input type="date" id="filter-to-mobile" class="filter-date">
+    <button class="btn btn-primary" onclick="applyMobileFilter()">Filtrar</button>
+    <button class="btn btn-week" onclick="clearMobileFilter()">Todos</button>
+  </div>
+</div>
 
 <!-- Tabs -->
 <div class="tabs">
   <button class="tab-btn active" id="tab-active" onclick="switchTab('active')">⚡ En progreso</button>
   <button class="tab-btn" id="tab-uploaded" onclick="switchTab('uploaded')">✅ Subidos</button>
+  <button class="tab-btn" id="tab-calendar" onclick="switchTab('calendar')">📅 Calendario</button>
 </div>
 
 <!-- Stats bar -->
@@ -59,6 +73,17 @@
   <div id="replay-pagination" class="pagination"></div>
 </div>
 
+<!-- Calendar -->
+<div id="calendar-view" class="hidden" style="padding: 20px 24px">
+  <div class="cal-nav">
+    <button class="btn btn-week" onclick="calPrev()">‹</button>
+    <span id="cal-title" style="font-weight:600;font-size:1rem;color:#fff"></span>
+    <button class="btn btn-week" onclick="calNext()">›</button>
+  </div>
+  <div class="cal-grid" id="cal-grid"></div>
+  <div id="cal-tooltip" class="cal-tooltip hidden"></div>
+</div>
+
 <!-- Replay Modal -->
 <div id="modal-overlay" class="hidden">
   <div class="modal">
@@ -76,8 +101,8 @@
           <input type="text" id="field-replay-id" placeholder="578530-80432376">
         </div>
         <div class="form-group">
-          <label>Fecha planificada</label>
-          <input type="date" id="field-date">
+          <label>Fecha y hora de publicación</label>
+          <input type="datetime-local" id="field-publish-at">
         </div>
       </div>
 
@@ -101,6 +126,17 @@
         <div class="form-group">
           <label>Texto derecha</label>
           <input type="text" id="field-label-right" placeholder="HIGH RATED">
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label>Etiqueta thumbnail 1 <span style="color:#666;font-weight:400">(opcional, si difiere del Deck 1)</span></label>
+          <input type="text" id="field-thumbnail-label1" placeholder="Pure Mitsurugi">
+        </div>
+        <div class="form-group">
+          <label>Etiqueta thumbnail 2 <span style="color:#666;font-weight:400">(opcional, si difiere del Deck 2)</span></label>
+          <input type="text" id="field-thumbnail-label2" placeholder="Snake-Eyes Fiendsmith">
         </div>
       </div>
 
@@ -132,13 +168,6 @@
       <div class="form-group" id="group-youtube-url" style="display:none">
         <label>URL YouTube</label>
         <input type="text" id="field-youtube-url" placeholder="https://youtube.com/watch?v=...">
-      </div>
-
-      <div class="form-row">
-        <div class="form-group">
-          <label>Publicar en YouTube el</label>
-          <input type="datetime-local" id="field-publish-at">
-        </div>
       </div>
 
       <div class="form-group">
@@ -241,6 +270,20 @@
       <button class="btn btn-week" onclick="document.getElementById('privacy-overlay').classList.add('hidden')">Cancelar</button>
       <button class="btn btn-success" id="btn-confirm-upload">Subir</button>
     </div>
+  </div>
+</div>
+
+<!-- Upload Progress Modal -->
+<div id="upload-overlay" class="hidden">
+  <div class="modal" style="width:420px;text-align:center">
+    <div style="font-size:2rem;margin-bottom:12px">📤</div>
+    <h2 style="margin-bottom:6px">Subiendo a YouTube</h2>
+    <p id="upload-modal-info" style="color:#888;font-size:0.85rem;margin-bottom:20px"></p>
+    <div style="background:#0f1117;border-radius:8px;height:10px;overflow:hidden;margin-bottom:8px">
+      <div id="upload-modal-fill" style="height:10px;background:#3b82f6;width:0%;transition:width 0.4s"></div>
+    </div>
+    <div id="upload-modal-pct" style="font-size:1.2rem;font-weight:700;color:#3b82f6;margin-bottom:20px">0%</div>
+    <button class="btn btn-danger" id="upload-modal-cancel">Cancelar</button>
   </div>
 </div>
 
