@@ -141,10 +141,12 @@ def create_replay():
 
     with get_connection() as conn:
         try:
+            publish_at = data.get("publish_at") or None
             conn.execute("""
                 INSERT INTO replays
-                    (replay_id, deck1, deck2, label_left, label_right, title, description, tags, notes, scheduled_date)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    (replay_id, deck1, deck2, label_left, label_right, title, description, tags, notes,
+                     scheduled_date, publish_at, thumbnail_label1, thumbnail_label2)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 replay_id,
                 data.get("deck1", ""),
@@ -155,7 +157,10 @@ def create_replay():
                 data.get("description", ""),
                 data.get("tags", ""),
                 data.get("notes", ""),
-                data.get("scheduled_date") or None,
+                publish_at[:10] if publish_at else None,
+                publish_at,
+                data.get("thumbnail_label1", ""),
+                data.get("thumbnail_label2", ""),
             ))
             conn.commit()
         except Exception as e:
